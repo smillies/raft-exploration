@@ -8,9 +8,12 @@ import io.atomix.copycat.server.storage.snapshot.SnapshotWriter;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MapStateMachine extends StateMachine implements Snapshottable {
+public class MapStateMachine<K,V> extends StateMachine implements Snapshottable {
 
-	private Map<Object, Object> map = new HashMap<>();
+	// this is not a concurrent map. Copycat should serialize all operations on this state machine, so there is no potential for
+	// concurrency. Or is there? It would be surprising, given that we  Copycat works by log replication, and the log probably
+	// cannot express parallelism
+	private Map<K, V> map = new HashMap<K, V>();
 
 	/*
 	 * State machine operations are implemented as public methods on the state machine class which accept a single Commit parameter where
@@ -18,7 +21,16 @@ public class MapStateMachine extends StateMachine implements Snapshottable {
 	 * applies to a given state machine methods based on the generic argument to the Commit parameter.
 	 */
 
-	public Object put(Commit<PutCommand> commit) {
+	public void clear(Commit<ClearCommand> commit) {
+		try {
+			map.clear();
+		}
+		finally {
+			commit.close(); // finally block required, not AutoCloseable
+		}
+	}
+	
+	public V put(Commit<PutCommand<K,V>> commit) {
 		try {
 			return map.put(commit.operation().key(), commit.operation().value());
 		}
@@ -27,9 +39,27 @@ public class MapStateMachine extends StateMachine implements Snapshottable {
 		}
 	}
 
-	public Object get(Commit<GetQuery> commit) {
+	public V get(Commit<GetQuery<V>> commit) {
 		try {
 			return map.get(commit.operation().key());
+		}
+		finally {
+			commit.close();
+		}
+	}
+	
+	public int size(Commit<SizeQuery> commit) {
+		try {
+			return map.size();
+		}
+		finally {
+			commit.close();
+		}
+	}
+	
+	public Map<K, V> snapshot(Commit<SnapshotQuery<K,V>> commit) {
+		try {
+			return map;
 		}
 		finally {
 			commit.close();

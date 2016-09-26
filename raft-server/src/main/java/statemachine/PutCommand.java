@@ -6,22 +6,23 @@ import io.atomix.copycat.Command;
  * A Command is a state-changing operation.
  */
 
-@SuppressWarnings("serial")
-public class PutCommand implements Command<Object> {
+public class PutCommand<K,V> implements Command<V> {
 
-	private final Object key;
-	private final Object value;
+	private static final long serialVersionUID = -7079524886814383447L;
+	
+	private final K key;
+	private final V value;
 
-	public PutCommand(Object key, Object value) {
+	public PutCommand(K key, V value) {
 		this.key = key;
 		this.value = value;
 	}
 
-	public Object key() {
+	public K key() {
 		return key;
 	}
 
-	public Object value() {
+	public V value() {
 		return value;
 	}
 

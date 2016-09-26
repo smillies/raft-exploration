@@ -1,19 +1,24 @@
 package server;
 
 import io.atomix.catalyst.transport.Address;
-import io.atomix.catalyst.transport.netty.NettyTransport;
 import io.atomix.copycat.server.CopycatServer;
 import io.atomix.copycat.server.storage.Storage;
 import io.atomix.copycat.server.storage.StorageLevel;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.concurrent.CompletableFuture;
 import statemachine.GetQuery;
 import statemachine.MapStateMachine;
 import statemachine.PutCommand;
+import util.FileUtils;
 
 import static java.util.Collections.singleton;
 
 /**
+ * A simple server cluster that runs three servers inside the same JVM, on localhost ports 5001, 5002, 5003. Intended for use
+ * with JUnit tests.
+ * <p>
  * Copycat uses the builder pattern for configuring and constructing servers.
  * <ul>
  * <li>Each Copycat server must be initialized with a local server Address.
@@ -34,22 +39,31 @@ import static java.util.Collections.singleton;
  * @author Initial author: Sebastian Millies
  */
 
-public class Cluster {
+public class SimpleCluster {
 
 	public static CopycatServer createServer(String host, int port) {
 		Address address = new Address(host, port);
 		CopycatServer server = CopycatServer.builder(address).withStateMachine(MapStateMachine::new)
 //				.withTransport(NettyTransport.builder().withThreads(4).build()) // Netty is default
 				.withStorage(
-						Storage.builder().withDirectory(new File(host + "_" + port + "_logs")).withStorageLevel(StorageLevel.DISK).build())
+						Storage.builder().withDirectory(new File(storageDir(host, port))).withStorageLevel(StorageLevel.DISK).build())
 				.build();
 		
 		server.serializer().register(PutCommand.class);
 		server.serializer().register(GetQuery.class);
 		return server;
 	}
+
+	private static String storageDir(String host, int port) {
+		return host + "_" + port + "_logs";
+	}
 	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws IOException {
+		// Always start the cluster in a clean state (makes testing more predictable)
+		FileUtils.deleteDirectory(Paths.get(storageDir("localhost", 5001)));
+		FileUtils.deleteDirectory(Paths.get(storageDir("localhost", 5002)));
+		FileUtils.deleteDirectory(Paths.get(storageDir("localhost", 5003)));
+		
 		CopycatServer server1 = createServer("localhost", 5001);
 		CopycatServer server2 = createServer("localhost", 5002);
 		CopycatServer server3 = createServer("localhost", 5003);
@@ -57,6 +71,6 @@ public class Cluster {
 		CompletableFuture<Void> future1 = server1.bootstrap().thenRun(() -> System.out.println("Server1 bootstrapped"));
 		CompletableFuture<Void> future2 = server2.join(singleton(new Address("localhost", 5001))).thenRun(() -> System.out.println("Server2 joined cluster"));
 		CompletableFuture<Void> future3 = server3.join(singleton(new Address("localhost", 5001))).thenRun(() -> System.out.println("Server3 joined cluster"));
-		CompletableFuture.allOf(future1, future2, future3).thenRun(() -> System.out.println("Cluster is ready"));
+		CompletableFuture.allOf(future1, future2, future3).thenRun(() -> System.out.println("SimpleCluster is ready"));
 	}
 }
