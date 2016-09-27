@@ -8,5 +8,10 @@ public class ClearCommand  implements Command<Void> {
 
 	public ClearCommand() {
 	}
+	
+	@Override
+	public CompactionMode compaction() {
+		return CompactionMode.TOMBSTONE;
+	}
 
 }
