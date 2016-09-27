@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
+import joptsimple.ValueConverter;
 import statemachine.ClearCommand;
 import statemachine.GetQuery;
 import statemachine.MapStateMachine;
@@ -19,6 +21,7 @@ import statemachine.SnapshotQuery;
 import util.FileUtils;
 
 import static java.util.Collections.singleton;
+import static server.StartServer.AddressConverter.addressConverter;
 
 /**
  * Starts a {@code CopycatServer}. The main method accepts the following command line options:
@@ -35,11 +38,11 @@ public class StartServer {
 	public static void main(String[] args) throws IOException {
 		OptionParser parser = new OptionParser();
 		parser.accepts("clean");
-		parser.accepts("address").withRequiredArg().required();
-		parser.accepts("join").withRequiredArg();
+		OptionSpec<Address> addressOption = parser.accepts("address").withRequiredArg().required().withValuesConvertedBy(addressConverter());
+		OptionSpec<Address> joinOption = parser.accepts("join").withRequiredArg().withValuesConvertedBy(addressConverter());
 		OptionSet options = parser.parse(args);
 		
-		Address address = asAddress(options.valueOf("address"));
+		Address address = options.valueOf(addressOption);
 		CopycatServer server = createServer(address);
 		
 		if (options.has("clean")) {
@@ -49,7 +52,7 @@ public class StartServer {
 		}
 		
 		if (options.has("join")) {
-			Address cluster = asAddress(options.valueOf("join"));
+			Address cluster = options.valueOf(joinOption);
 			server.join(singleton(cluster)).thenRun(() -> System.out.println("Server " + address + " joined cluster at " + cluster));
 		}
 		else {
@@ -73,14 +76,31 @@ public class StartServer {
 		return server;
 	}
 
-	private static Address asAddress(Object option) {
-		String hostPort = (String) option;
-		String[] part = hostPort.split(":");
-		return new Address(part[0], Integer.valueOf(part[1]));
-	}
-	
 	private static String storageDir(Address address) {
 		return address.host() + "_" + address.port() + "_logs";
+	}
+	
+	static class AddressConverter implements ValueConverter<Address> {
+		
+		public static final AddressConverter addressConverter() {
+			return new AddressConverter();
+		}
+		
+		@Override
+		public Address convert(String value) {
+			String[] part = value.split(":");
+			return new Address(part[0], Integer.valueOf(part[1]));
+		}
+
+		@Override
+		public Class<? extends Address> valueType() {
+			return Address.class;
+		}
+
+		@Override
+		public String valuePattern() {
+			return null;
+		}
 	}
 
 }

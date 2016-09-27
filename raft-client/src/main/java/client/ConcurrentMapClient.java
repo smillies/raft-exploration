@@ -77,7 +77,7 @@ public class ConcurrentMapClient<K, V> implements ConcurrentMap<K, V> {
 	 */
 	@Override
 	public V put(K key, V value) {
-		CompletableFuture<V> future = client.submit(new PutCommand<K, V>(key, value));
+		CompletableFuture<V> future = client.submit(new PutCommand<>(key, value));
 		return future.join();
 	}
 

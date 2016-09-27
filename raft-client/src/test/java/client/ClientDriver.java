@@ -60,7 +60,7 @@ public class ClientDriver {
 		Map<String, String> expected = new HashMap<>();
 		expected.put("baz", "Hello world!");
 
-		CompletableFuture<Set<Entry<String, String>>> future = client.submit(new PutCommand<String, String>("baz", "Hello world!"))
+		CompletableFuture<Set<Entry<String, String>>> future = client.submit(new PutCommand<>("baz", "Hello world!"))
 				.thenCompose(_v -> client.submit(new SnapshotQuery<String, String>())).thenApply(Map::entrySet);
 		try {
 			assertEquals(expected.entrySet(), future.join());
@@ -72,7 +72,7 @@ public class ClientDriver {
 
 	@Test
 	public void get() throws Throwable {
-		CompletableFuture<String> future = client.submit(new PutCommand<String, String>("baz", "Hello world!"))
+		CompletableFuture<String> future = client.submit(new PutCommand<>("baz", "Hello world!"))
 				.thenCompose(_v -> client.submit(new GetQuery<String>("baz")));
 		try {
 			assertEquals("Hello world!", future.join());
@@ -89,8 +89,8 @@ public class ClientDriver {
 		// operation, a client can submit multiple operations and either await the result or react to the result once it has been received
 		@SuppressWarnings("unchecked")
 		CompletableFuture<String>[] futures = new CompletableFuture[2];
-		futures[0] = client.submit(new PutCommand<String, String>("foo", "Hello world!"));
-		futures[1] = client.submit(new PutCommand<String, String>("bar", "Hello world!"));
+		futures[0] = client.submit(new PutCommand<>("foo", "Hello world!"));
+		futures[1] = client.submit(new PutCommand<>("bar", "Hello world!"));
 
 		// Print a message once all commands have completed
 		CompletableFuture.allOf(futures).thenRun(() -> System.out.println("Commands completed!"));

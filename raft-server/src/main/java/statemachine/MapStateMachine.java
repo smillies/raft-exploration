@@ -13,7 +13,7 @@ public class MapStateMachine<K,V> extends StateMachine implements Snapshottable 
 	// this is not a concurrent map. Copycat should serialize all operations on this state machine, so there is no potential for
 	// concurrency. Or is there? It would be surprising, given that we  Copycat works by log replication, and the log probably
 	// cannot express parallelism
-	private Map<K, V> map = new HashMap<K, V>();
+	private Map<K, V> map = new HashMap<>();
 
 	/*
 	 * State machine operations are implemented as public methods on the state machine class which accept a single Commit parameter where
