@@ -1,16 +1,10 @@
 package client;
 
-import io.atomix.catalyst.transport.Address;
-import io.atomix.catalyst.transport.netty.NettyTransport;
-import io.atomix.copycat.client.CopycatClient;
-import java.util.Locale;
-import java.util.Random;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Group;
+import org.openjdk.jmh.annotations.GroupThreads;
 import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
@@ -24,10 +18,11 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 import org.openjdk.jmh.runner.options.VerboseMode;
-import statemachine.GetQuery;
-import statemachine.PutCommand;
 
-import static java.util.Arrays.asList;
+import java.util.Locale;
+import java.util.Random;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * How to run this benchmark:
@@ -37,60 +32,79 @@ import static java.util.Arrays.asList;
  * <li>java -jar target/benchmarks.jar or call main()
  * </ol>
  * Running benchmarks from within an existing project, or even from within the IDE, makes the results less reliable.
+ *
  * @author Initial author: Sebastian Millies
  */
 @BenchmarkMode({ Mode.Throughput })
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@OutputTimeUnit(TimeUnit.SECONDS)
 @State(Scope.Benchmark)
 @Warmup(iterations = 2, time = 5, timeUnit = TimeUnit.SECONDS)
-@Measurement(iterations = 5, time = 5, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 10, time = 5, timeUnit = TimeUnit.SECONDS)
 @Fork(1) // set to zero for local debugging, otherwise no JDWP agent
-public class ConcurrentMapClientBenchmark {
+public abstract class ConcurrentMapClientBenchmark {
 
-	private Random random;
-	private ConcurrentMap<Long, String> client;
+  static final int MAX_CLIENTS = 1;
+  private static final int MAX_KEY_SPACE = 100000;
 
-	@Setup(Level.Trial)
-	public void createClient() {
-		random = new Random();
+  private final Random random = new Random();
+  private final ConcurrentMap<Long, String>[] clients = new ConcurrentMap[MAX_CLIENTS];
+  private final long[] keySpace = new long[MAX_KEY_SPACE];
 
-		System.out.println("Creating client");
-		CopycatClient copycatClient = CopycatClient.builder()
-				// .builder(new Address("localhost", 5001), new Address("localhost", 5002))
-				.withTransport(NettyTransport.builder().withThreads(2).build()).build();
+  @Setup(Level.Trial)
+  public void createClient() {
+    System.out.println("Creating clients");
+    createSpecificClient(clients);
+    for (int i = 0; i < MAX_KEY_SPACE; i++) {
+      keySpace[i] = random.nextLong();
+      if (i % 1000 == 0) {
+        clients[0].put(keySpace[i], "initial-val" + keySpace[i]);
+      }
+    }
+    System.out.println("Clients created");
+  }
 
-		copycatClient.serializer().register(PutCommand.class);
-		copycatClient.serializer().register(GetQuery.class);
+  abstract void createSpecificClient(ConcurrentMap<Long, String>[] clients);
 
-		CompletableFuture<CopycatClient> future = copycatClient
-				.connect(asList(new Address("localhost", 5001), new Address("localhost", 5099)));
-		future.join(); // block
+  @Setup(Level.Iteration)
+  public void clearMap() {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+      clients[i].clear();
+    }
+  }
 
-		client = new ConcurrentMapClient<>(copycatClient);
-	}
+  @Benchmark
+  @Group("writer_only")
+  @GroupThreads(100)
+  public Object put() {
+    int j = random.nextInt(MAX_KEY_SPACE);
+    int i = j % MAX_CLIENTS;
+    return clients[i].put(keySpace[j], "val" + i);
+  }
 
-	@Setup(Level.Iteration)
-	public void clearMap() {
-		client.clear();
-	}
+  @Benchmark
+  @Group("reader_writer")
+  @GroupThreads(20)
+  public Object put1() {
+    int j = random.nextInt(MAX_KEY_SPACE);
+    int i = j % MAX_CLIENTS;
 
-	@Benchmark
-	public Object put() {
-		return client.put(random.nextLong(), "val");
-	}
+    return clients[i].put(keySpace[j], "val" + i);
+  }
 
-	@Benchmark
-	public Object putAndGet() {
-		long key = random.nextLong();
-		client.put(key, "val");
-		return client.get(key);
-	}
+  @Benchmark
+  @Group("reader_writer")
+  @GroupThreads(80)
+  public Object get1() {
+    int i = random.nextInt(MAX_CLIENTS);
+    long key = keySpace[random.nextInt(MAX_KEY_SPACE)];
+    return clients[i].get(key);
+  }
 
-	public static void main(String[] args) throws RunnerException {
-		Locale.setDefault(Locale.ENGLISH);
-		Options opt = new OptionsBuilder().verbosity(VerboseMode.EXTRA)
-				.include(".*" + ConcurrentMapClientBenchmark.class.getSimpleName() + ".*").build();
+  public static void main(String[] args) throws RunnerException {
+    Locale.setDefault(Locale.ENGLISH);
+    Options opt = new OptionsBuilder().verbosity(VerboseMode.EXTRA)
+        .include(".*" + ConcurrentMapClientBenchmark.class.getSimpleName() + ".*").build();
 
-		new Runner(opt).run();
-	}
+    new Runner(opt).run();
+  }
 }
